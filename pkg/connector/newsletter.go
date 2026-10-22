@@ -46,9 +46,15 @@ const (
 	mutationDeleteNewsletter = "30062808666639665"
 )
 
-// xwa2_newsletter_create query IDs taking input {name, description}, newest first.
-// WhatsApp answers whatsmeow's older query (newsletter_input) with "400 Bad Request".
-var mutationCreateNewsletterIDs = []string{"25149874324715067", "8823471724422422"}
+// xwa2_newsletter_create queries, tried in order: WhatsApp Web's (2026-10) and the
+// desktop one whatsmeow main uses for clients without web info. WhatsApp answers
+// whatsmeow's own web query (newsletter_input) with "400 Bad Request".
+var newsletterCreateQueries = []struct{ id, inputKey string }{
+	{"25149874324715067", "input"},
+	{"8823471724422422", "input"},
+	{"27527996220149684", "newsletter_input"},
+	{"27527996220149684", "input"},
+}
 
 type respCreateNewsletter struct {
 	Newsletter *types.NewsletterMetadata `json:"xwa2_newsletter_create"`
@@ -105,17 +111,18 @@ func (wa *WhatsAppClient) createNewsletter(ctx context.Context, req whatsmeow.Cr
 	if req.Description != "" {
 		input["description"] = req.Description
 	}
-	for _, queryID := range mutationCreateNewsletterIDs {
-		raw, err := wa.Client.DangerousInternals().SendMexIQ(ctx, queryID, map[string]any{"input": input})
+	for _, query := range newsletterCreateQueries {
+		raw, err := wa.Client.DangerousInternals().SendMexIQ(ctx, query.id, map[string]any{query.inputKey: input})
 		if err == nil {
 			var resp respCreateNewsletter
 			if err = json.Unmarshal(raw, &resp); err == nil && resp.Newsletter != nil {
+				zerolog.Ctx(ctx).Info().Str("query_id", query.id).Str("input_key", query.inputKey).Msg("Channel create query worked")
 				return resp.Newsletter, nil
 			} else if err == nil {
 				err = errors.New("empty response")
 			}
 		}
-		zerolog.Ctx(ctx).Warn().Err(err).Str("query_id", queryID).Msg("Channel create query failed, trying the next one")
+		zerolog.Ctx(ctx).Warn().Err(err).Str("query_id", query.id).Str("input_key", query.inputKey).Msg("Channel create query failed, trying the next one")
 	}
 	return wa.Client.CreateNewsletter(ctx, req)
 }
