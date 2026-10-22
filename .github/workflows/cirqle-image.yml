@@ -1,10 +1,11 @@
 # CIRQLE: builds the patched bridge image that runs on cirqle-vps-misc.
-# Every push to `cirqle` publishes ghcr.io/tesla-prep/mautrix-whatsapp:cirqle-<short sha>.
+# Every push to `cirqle` or a `cirqle-*` branch publishes ghcr.io/tesla-prep/mautrix-whatsapp:cirqle-<short sha>;
+# `cirqle` also moves the :cirqle tag.
 name: CIRQLE image
 
 on:
   push:
-    branches: [cirqle]
+    branches: [cirqle, 'cirqle-*']
   workflow_dispatch:
 
 jobs:
@@ -31,6 +32,6 @@ jobs:
           push: true
           tags: |
             ghcr.io/tesla-prep/mautrix-whatsapp:cirqle-${{ steps.sha.outputs.short }}
-            ghcr.io/tesla-prep/mautrix-whatsapp:cirqle
+            ${{ github.ref == 'refs/heads/cirqle' && 'ghcr.io/tesla-prep/mautrix-whatsapp:cirqle' || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
