@@ -29,6 +29,7 @@ import (
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/commands"
+	"maunium.net/go/mautrix/bridgev2/database"
 	"maunium.net/go/mautrix/bridgev2/provisionutil"
 	"maunium.net/go/mautrix/event"
 
@@ -81,6 +82,25 @@ func (wa *WhatsAppClient) createChannel(ctx context.Context, params *bridgev2.Gr
 	return &bridgev2.CreateChatResponse{
 		PortalKey:  wa.makeWAPortalKey(info.ID),
 		PortalInfo: wa.wrapNewsletterInfo(ctx, info),
+	}, nil
+}
+
+// sendNewsletterReaction reacts to a channel message, which channels address by its server ID.
+func (wa *WhatsAppClient) sendNewsletterReaction(ctx context.Context, jid types.JID, target *database.Message, emoji string) (*database.Reaction, error) {
+	serverID := target.Metadata.(*waid.MessageMetadata).NewsletterServerID
+	if serverID == 0 {
+		return nil, bridgev2.WrapErrorInStatus(errors.New("can't react to this channel message")).
+			WithErrorAsMessage().WithIsCertain(true).WithSendNotice(false).WithErrorReason(event.MessageStatusUnsupported)
+	}
+	err := wa.Client.NewsletterSendReaction(ctx, jid, serverID, emoji, "")
+	if err != nil {
+		return nil, err
+	}
+	return &database.Reaction{
+		Metadata: &waid.ReactionMetadata{
+			SenderDeviceID:     wa.JID.Device,
+			NewsletterServerID: serverID,
+		},
 	}, nil
 }
 

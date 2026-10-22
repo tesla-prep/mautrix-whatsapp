@@ -132,7 +132,8 @@ func (wa *WhatsAppClient) handleConvertedMatrixMessage(ctx context.Context, msg 
 			SenderID:  waid.MakeUserID(resp.Sender),
 			Timestamp: resp.Timestamp,
 			Metadata: &waid.MessageMetadata{
-				SenderDeviceID: wa.JID.Device,
+				SenderDeviceID:     wa.JID.Device,
+				NewsletterServerID: resp.ServerID,
 			},
 		},
 		StreamOrder:   resp.Timestamp.Unix(),
@@ -168,6 +169,9 @@ func (wa *WhatsAppClient) HandleMatrixReaction(ctx context.Context, msg *bridgev
 	portalJID, err := waid.ParsePortalID(msg.Portal.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse portal ID: %w", err)
+	}
+	if portalJID.Server == types.NewsletterServer {
+		return wa.sendNewsletterReaction(ctx, portalJID, msg.TargetMessage, msg.PreHandleResp.Emoji)
 	}
 	reactionMsg := &waE2E.Message{
 		ReactionMessage: &waE2E.ReactionMessage{
@@ -209,6 +213,13 @@ func (wa *WhatsAppClient) HandleMatrixReactionRemove(ctx context.Context, msg *b
 		return fmt.Errorf("failed to parse portal ID: %w", err)
 	}
 
+	if portalJID.Server == types.NewsletterServer {
+		serverID := msg.TargetReaction.Metadata.(*waid.ReactionMetadata).NewsletterServerID
+		if serverID == 0 {
+			return errors.New("channel message of this reaction is unknown")
+		}
+		return wa.Client.NewsletterSendReaction(ctx, portalJID, serverID, "", "")
+	}
 	reactionMsg := &waE2E.Message{
 		ReactionMessage: &waE2E.ReactionMessage{
 			Key:               wa.messageIDToKey(messageID),

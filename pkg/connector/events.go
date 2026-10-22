@@ -286,6 +286,13 @@ func (evt *WAMessageEvent) ConvertMessage(ctx context.Context, portal *bridgev2.
 	converted := evt.wa.Main.MsgConv.ToMatrix(
 		ctx, portal, evt.wa.Client, intent, evt.Message, evt.MsgEvent.RawMessage, &evt.Info, evt.isViewOnce(), false, nil,
 	)
+	if evt.Info.ServerID != 0 {
+		for _, part := range converted.Parts {
+			if meta, ok := part.DBMetadata.(*waid.MessageMetadata); ok {
+				meta.NewsletterServerID = evt.Info.ServerID
+			}
+		}
+	}
 	if isFailedMedia(converted) {
 		evt.postHandle = func() {
 			evt.wa.processFailedMedia(ctx, portal.PortalKey, evt.GetID(), converted, false)

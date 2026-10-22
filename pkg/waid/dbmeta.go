@@ -96,6 +96,8 @@ type MessageMetadata struct {
 	DirectMediaMeta  json.RawMessage   `json:"direct_media_meta,omitempty"`
 	IsMatrixPoll     bool              `json:"is_matrix_poll,omitzero"`
 	Edits            []types.MessageID `json:"edits,omitempty"`
+	// Channels address messages by this server-assigned number, e.g. in reactions.
+	NewsletterServerID types.MessageServerID `json:"newsletter_server_id,omitzero"`
 }
 
 func (mm *MessageMetadata) CopyFrom(other any) {
@@ -115,10 +117,15 @@ func (mm *MessageMetadata) CopyFrom(other any) {
 		mm.GroupInvite = otherMM.GroupInvite
 	}
 	mm.IsMatrixPoll = mm.IsMatrixPoll || otherMM.IsMatrixPoll
+	if otherMM.NewsletterServerID != 0 {
+		mm.NewsletterServerID = otherMM.NewsletterServerID
+	}
 }
 
 type ReactionMetadata struct {
 	SenderDeviceID uint16 `json:"sender_device_id,omitempty"`
+	// The reacted channel message, so the reaction can be taken back.
+	NewsletterServerID types.MessageServerID `json:"newsletter_server_id,omitzero"`
 }
 
 type PortalMetadata struct {
