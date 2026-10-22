@@ -54,19 +54,48 @@ type respCreateNewsletter struct {
 	Newsletter *types.NewsletterMetadata `json:"xwa2_newsletter_create"`
 }
 
-// acceptChannelTerms accepts the channel creation terms the way WhatsApp Web does.
+// Notices around channels: consumer 20601216, creation 20601217, admin invite 20601218.
+var newsletterTOSNoticeIDs = []string{"20601216", "20601217", "20601218"}
+
+func tosNoticeNodes(ids []string) []waBinary.Node {
+	nodes := make([]waBinary.Node, len(ids))
+	for i, id := range ids {
+		nodes[i] = waBinary.Node{Tag: "notice", Attrs: waBinary.Attrs{"id": id}}
+	}
+	return nodes
+}
+
+// acceptChannelTerms accepts the channel creation terms the way WhatsApp Web does,
+// and the older way whatsmeow documents if that is refused. It logs the terms' state.
 func (wa *WhatsAppClient) acceptChannelTerms(ctx context.Context) error {
-	_, err := wa.Client.DangerousInternals().SendIQ(ctx, whatsmeow.DangerousInfoQuery{
+	log := zerolog.Ctx(ctx)
+	internals := wa.Client.DangerousInternals()
+	state, err := internals.SendIQ(ctx, whatsmeow.DangerousInfoQuery{
+		Namespace: "tos",
+		Type:      whatsmeow.DangerousInfoQueryType("get"),
+		To:        types.ServerJID,
+		Content:   []waBinary.Node{{Tag: "request", Content: tosNoticeNodes(newsletterTOSNoticeIDs)}},
+	})
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to read channel terms state")
+	} else {
+		log.Info().Str("state", state.String()).Msg("Channel terms state")
+	}
+	_, err = internals.SendIQ(ctx, whatsmeow.DangerousInfoQuery{
 		Namespace: "tos",
 		Type:      whatsmeow.DangerousInfoQueryType("set"),
 		To:        types.ServerJID,
 		Content: []waBinary.Node{{
 			Tag:     "request",
 			Attrs:   waBinary.Attrs{"type": "session_update"},
-			Content: []waBinary.Node{{Tag: "notice", Attrs: waBinary.Attrs{"id": newsletterCreationTOSNoticeID}}},
+			Content: tosNoticeNodes([]string{newsletterCreationTOSNoticeID}),
 		}},
 	})
-	return err
+	if err == nil {
+		return nil
+	}
+	log.Warn().Err(err).Msg("Failed to accept channel terms with a session update, trying the older request")
+	return wa.Client.AcceptTOSNotice(ctx, newsletterCreationTOSNoticeID, "5")
 }
 
 // createNewsletter tries the current create queries first and whatsmeow's own last.
