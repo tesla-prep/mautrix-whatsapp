@@ -18,6 +18,7 @@ package connector
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -42,7 +43,34 @@ const (
 	newsletterTOSNoticeStage = "5"
 	// The xwa2_newsletter_delete_v2 mutation, which whatsmeow doesn't wrap yet.
 	mutationDeleteNewsletter = "30062808666639665"
+	// xwa2_newsletter_create as WhatsApp Web sends it in 2026-10 (input: {name, description});
+	// whatsmeow's older query (newsletter_input) is refused with "400 Bad Request".
+	mutationCreateNewsletter = "8823471724422422"
 )
+
+type respCreateNewsletter struct {
+	Newsletter *types.NewsletterMetadata `json:"xwa2_newsletter_create"`
+}
+
+// createNewsletter tries the current create query first and whatsmeow's own after it.
+// The current query sets no picture; set it from the phone.
+func (wa *WhatsAppClient) createNewsletter(ctx context.Context, req whatsmeow.CreateNewsletterParams) (*types.NewsletterMetadata, error) {
+	input := map[string]any{"name": req.Name, "description": nil}
+	if req.Description != "" {
+		input["description"] = req.Description
+	}
+	raw, err := wa.Client.DangerousInternals().SendMexIQ(ctx, mutationCreateNewsletter, map[string]any{"input": input})
+	if err == nil {
+		var resp respCreateNewsletter
+		if err = json.Unmarshal(raw, &resp); err == nil && resp.Newsletter != nil {
+			return resp.Newsletter, nil
+		} else if err == nil {
+			err = errors.New("empty response")
+		}
+	}
+	zerolog.Ctx(ctx).Warn().Err(err).Msg("Current channel create query failed, trying whatsmeow's")
+	return wa.Client.CreateNewsletter(ctx, req)
+}
 
 // createChannel creates a WhatsApp channel owned by this login. The caller
 // (provisionutil.CreateGroup) creates the portal room from the returned info.
@@ -69,7 +97,7 @@ func (wa *WhatsAppClient) createChannel(ctx context.Context, params *bridgev2.Gr
 	if err := wa.Client.AcceptTOSNotice(ctx, newsletterTOSNoticeID, newsletterTOSNoticeStage); err != nil {
 		zerolog.Ctx(ctx).Warn().Err(err).Msg("Failed to accept channel terms, trying to create the channel anyway")
 	}
-	info, err := wa.Client.CreateNewsletter(ctx, req)
+	info, err := wa.createNewsletter(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create channel: %w", err)
 	} else if info == nil || info.ID.IsEmpty() {
