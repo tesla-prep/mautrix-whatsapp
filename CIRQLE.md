@@ -13,6 +13,7 @@ and deployed from `cirqle-agents/deploy/team-messenger/prod/compose.yaml`.
 - `delete-channel` in a channel room deletes the channel (owner only).
 - Photos, videos, audio and files sent to a channel room are uploaded as
   channel media (unencrypted, with the upload's media handle).
+- Reactions to channel messages are sent with the message's server ID.
 - In channels the login administers, every Matrix user in the room may post
   (power level 0), so relayed staff can write there.
 
