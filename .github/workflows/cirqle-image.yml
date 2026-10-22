@@ -29,9 +29,21 @@ jobs:
         with:
           context: .
           platforms: linux/amd64
-          push: true
+          load: true
           tags: |
             ghcr.io/tesla-prep/mautrix-whatsapp:cirqle-${{ steps.sha.outputs.short }}
             ${{ github.ref == 'refs/heads/cirqle' && 'ghcr.io/tesla-prep/mautrix-whatsapp:cirqle' || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Push
+        run: docker push --all-tags ghcr.io/tesla-prep/mautrix-whatsapp
+      # The package is private, so the server loads the image from this artifact:
+      #   gh run download <run> -R tesla-prep/mautrix-whatsapp -n image
+      #   ssh root@87.99.156.47 'gunzip -c | docker load' < image.tar.gz
+      - name: Save image
+        run: docker save ghcr.io/tesla-prep/mautrix-whatsapp:cirqle-${{ steps.sha.outputs.short }} | gzip > image.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image
+          path: image.tar.gz
+          retention-days: 90
