@@ -107,6 +107,7 @@ func (mc *MessageConverter) ToWhatsApp(
 	}
 
 	message := &waE2E.Message{}
+	var mediaHandle string
 	contextInfo := mc.generateContextInfo(ctx, replyTo, portal, content.BeeperDisappearingTimer, content.Mentions != nil && content.Mentions.Room)
 
 	switch content.MsgType {
@@ -122,6 +123,7 @@ func (mc *MessageConverter) ToWhatsApp(
 			return nil, nil, err
 		}
 		message = mc.constructMediaMessage(ctx, content, evt, uploaded, thumbnail, contextInfo, mime)
+		mediaHandle = uploaded.Handle
 	case event.MsgLocation:
 		lat, long, err := parseGeoURI(content.GeoURI)
 		if err != nil {
@@ -136,7 +138,7 @@ func (mc *MessageConverter) ToWhatsApp(
 	default:
 		return nil, nil, fmt.Errorf("%w %s", bridgev2.ErrUnsupportedMessageType, content.MsgType)
 	}
-	extra := &whatsmeow.SendRequestExtra{}
+	extra := &whatsmeow.SendRequestExtra{MediaHandle: mediaHandle}
 	if portal.Metadata.(*waid.PortalMetadata).CommunityAnnouncementGroup {
 		if threadRoot != nil {
 			parsedID, err := waid.ParseMessageID(threadRoot.ID)
@@ -622,7 +624,13 @@ func (mc *MessageConverter) reuploadFileToWhatsApp(
 		mediaType = whatsmeow.MediaDocument
 	}
 
-	uploaded, err := getClient(ctx).Upload(ctx, data, mediaType)
+	var uploaded whatsmeow.UploadResponse
+	if isNewsletterPortal(getPortal(ctx)) {
+		// Channel media is not encrypted and is sent with the handle of its upload.
+		uploaded, err = getClient(ctx).UploadNewsletter(ctx, data, mediaType)
+	} else {
+		uploaded, err = getClient(ctx).Upload(ctx, data, mediaType)
+	}
 	if err != nil {
 		zerolog.Ctx(ctx).Debug().
 			Str("file_name", fileName).
@@ -687,4 +695,9 @@ func getAudioInfo(content *event.MessageEventContent) (output []byte, duration u
 		}
 	}
 	return
+}
+
+func isNewsletterPortal(portal *bridgev2.Portal) bool {
+	jid, err := waid.ParsePortalID(portal.ID)
+	return err == nil && jid.Server == types.NewsletterServer
 }

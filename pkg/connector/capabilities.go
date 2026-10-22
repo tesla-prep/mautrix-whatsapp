@@ -34,6 +34,13 @@ var WhatsAppGeneralCaps = &bridgev2.NetworkGeneralCapabilities{
 				Participants: bridgev2.GroupFieldCapability{Allowed: true, Required: true, MinLength: 1},
 				Parent:       bridgev2.GroupFieldCapability{Allowed: true},
 			},
+			"channel": {
+				TypeDescription: "a channel",
+
+				Name:   bridgev2.GroupFieldCapability{Allowed: true, Required: true, MaxLength: 100},
+				Topic:  bridgev2.GroupFieldCapability{Allowed: true, MaxLength: 2048},
+				Avatar: bridgev2.GroupFieldCapability{Allowed: true},
+			},
 		},
 	},
 }

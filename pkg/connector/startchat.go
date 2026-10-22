@@ -251,6 +251,9 @@ func (wa *WhatsAppClient) getContactList(ctx context.Context, filter string, onl
 }
 
 func (wa *WhatsAppClient) CreateGroup(ctx context.Context, params *bridgev2.GroupCreateParams) (*bridgev2.CreateChatResponse, error) {
+	if params.Type == "channel" {
+		return wa.createChannel(ctx, params)
+	}
 	req := whatsmeow.ReqCreateGroup{
 		Name:         ptr.Val(params.Name).Name,
 		Participants: make([]types.JID, len(params.Participants)),

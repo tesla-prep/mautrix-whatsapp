@@ -514,6 +514,11 @@ func (wa *WhatsAppClient) wrapNewsletterInfo(ctx context.Context, info *types.Ne
 			mutedUntil = &bridgev2.Unmuted
 		}
 	}
+	// Matrix users in a channel the login administers post through it (e.g. via relay).
+	postPowerLevel := adminPL
+	if ownPowerLevel >= adminPL {
+		postPowerLevel = defaultPL
+	}
 	avatar := &bridgev2.Avatar{}
 	// TODO direct media for newsletter avatars
 	if info.ThreadMeta.Picture != nil {
@@ -552,7 +557,7 @@ func (wa *WhatsAppClient) wrapNewsletterInfo(ctx context.Context, info *types.Ne
 				},
 			},
 			PowerLevels: &bridgev2.PowerLevelOverrides{
-				EventsDefault: ptr.Ptr(adminPL),
+				EventsDefault: ptr.Ptr(postPowerLevel),
 				StateDefault:  ptr.Ptr(nobodyPL),
 				Ban:           ptr.Ptr(nobodyPL),
 				Events: map[event.Type]int{
