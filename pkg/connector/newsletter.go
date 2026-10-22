@@ -26,6 +26,7 @@ import (
 	"github.com/rs/zerolog"
 	"go.mau.fi/util/ptr"
 	"go.mau.fi/whatsmeow"
+	waBinary "go.mau.fi/whatsmeow/binary"
 	"go.mau.fi/whatsmeow/types"
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/bridgev2"
@@ -38,37 +39,55 @@ import (
 )
 
 const (
-	// WhatsApp asks an account to accept the channel terms once before its first channel.
-	newsletterTOSNoticeID    = "20601218"
-	newsletterTOSNoticeStage = "5"
+	// WhatsApp asks an account to accept the channel creation terms once before its first
+	// channel (WhatsApp Web AB prop newsletter_creation_tos_id, 2026-10).
+	newsletterCreationTOSNoticeID = "20601217"
 	// The xwa2_newsletter_delete_v2 mutation, which whatsmeow doesn't wrap yet.
 	mutationDeleteNewsletter = "30062808666639665"
-	// xwa2_newsletter_create as WhatsApp Web sends it in 2026-10 (input: {name, description});
-	// whatsmeow's older query (newsletter_input) is refused with "400 Bad Request".
-	mutationCreateNewsletter = "8823471724422422"
 )
+
+// xwa2_newsletter_create query IDs taking input {name, description}, newest first.
+// WhatsApp answers whatsmeow's older query (newsletter_input) with "400 Bad Request".
+var mutationCreateNewsletterIDs = []string{"25149874324715067", "8823471724422422"}
 
 type respCreateNewsletter struct {
 	Newsletter *types.NewsletterMetadata `json:"xwa2_newsletter_create"`
 }
 
-// createNewsletter tries the current create query first and whatsmeow's own after it.
-// The current query sets no picture; set it from the phone.
+// acceptChannelTerms accepts the channel creation terms the way WhatsApp Web does.
+func (wa *WhatsAppClient) acceptChannelTerms(ctx context.Context) error {
+	_, err := wa.Client.DangerousInternals().SendIQ(ctx, whatsmeow.DangerousInfoQuery{
+		Namespace: "tos",
+		Type:      whatsmeow.DangerousInfoQueryType("set"),
+		To:        types.ServerJID,
+		Content: []waBinary.Node{{
+			Tag:     "request",
+			Attrs:   waBinary.Attrs{"type": "session_update"},
+			Content: []waBinary.Node{{Tag: "notice", Attrs: waBinary.Attrs{"id": newsletterCreationTOSNoticeID}}},
+		}},
+	})
+	return err
+}
+
+// createNewsletter tries the current create queries first and whatsmeow's own last.
+// The current queries set no picture; set it from the phone.
 func (wa *WhatsAppClient) createNewsletter(ctx context.Context, req whatsmeow.CreateNewsletterParams) (*types.NewsletterMetadata, error) {
 	input := map[string]any{"name": req.Name, "description": nil}
 	if req.Description != "" {
 		input["description"] = req.Description
 	}
-	raw, err := wa.Client.DangerousInternals().SendMexIQ(ctx, mutationCreateNewsletter, map[string]any{"input": input})
-	if err == nil {
-		var resp respCreateNewsletter
-		if err = json.Unmarshal(raw, &resp); err == nil && resp.Newsletter != nil {
-			return resp.Newsletter, nil
-		} else if err == nil {
-			err = errors.New("empty response")
+	for _, queryID := range mutationCreateNewsletterIDs {
+		raw, err := wa.Client.DangerousInternals().SendMexIQ(ctx, queryID, map[string]any{"input": input})
+		if err == nil {
+			var resp respCreateNewsletter
+			if err = json.Unmarshal(raw, &resp); err == nil && resp.Newsletter != nil {
+				return resp.Newsletter, nil
+			} else if err == nil {
+				err = errors.New("empty response")
+			}
 		}
+		zerolog.Ctx(ctx).Warn().Err(err).Str("query_id", queryID).Msg("Channel create query failed, trying the next one")
 	}
-	zerolog.Ctx(ctx).Warn().Err(err).Msg("Current channel create query failed, trying whatsmeow's")
 	return wa.Client.CreateNewsletter(ctx, req)
 }
 
@@ -94,7 +113,7 @@ func (wa *WhatsAppClient) createChannel(ctx context.Context, params *bridgev2.Gr
 			return nil, err
 		}
 	}
-	if err := wa.Client.AcceptTOSNotice(ctx, newsletterTOSNoticeID, newsletterTOSNoticeStage); err != nil {
+	if err := wa.acceptChannelTerms(ctx); err != nil {
 		zerolog.Ctx(ctx).Warn().Err(err).Msg("Failed to accept channel terms, trying to create the channel anyway")
 	}
 	info, err := wa.createNewsletter(ctx, req)
