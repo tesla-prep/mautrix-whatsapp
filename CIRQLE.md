@@ -18,6 +18,10 @@ and deployed from `cirqle-agents/deploy/team-messenger/prod/compose.yaml`.
 - Reactions to channel messages are sent with the message's server ID.
 - In channels the login administers, every Matrix user in the room may post
   (power level 0), so relayed staff can write there.
+- In groups, WhatsApp admins (power level 50 and up, so the account when it
+  administers the group) may change Matrix power levels. The relay bot uses it to
+  give staff the kick level, so Element's «Remove from room» works for relayed
+  staff; the bridge carries a relayed kick out through the relay login.
 
 ## Updating to a new upstream release
 

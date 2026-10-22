@@ -294,6 +294,10 @@ func (wa *WhatsAppClient) wrapGroupInfo(ctx context.Context, info *types.GroupIn
 					event.EventRedaction:               defaultPL,
 					event.EventUnstablePollResponse:    defaultPL,
 					event.StateBeeperDisappearingTimer: metaChangePL,
+					// CIRQLE: a group admin (the account, when it administers the group) may give
+					// relayed staff the kick level, so Element's «Remove from room» works for them.
+					// WhatsApp never sees Matrix power levels: the bridge ignores this event.
+					event.StatePowerLevels: adminPL,
 				},
 			},
 		},
