@@ -8,6 +8,7 @@ import (
 	"math/rand/v2"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -260,10 +261,22 @@ func (wa *WhatsAppClient) contactToUserInfo(ctx context.Context, jid types.JID, 
 	} else if altJID.Server == types.DefaultUserServer {
 		phone = "+" + altJID.User
 	}
+	name := wa.Main.Config.FormatDisplayname(jid, phone, contact)
 	ui := &bridgev2.UserInfo{
-		Name:         ptr.Ptr(wa.Main.Config.FormatDisplayname(jid, phone, contact)),
+		Name:         ptr.Ptr(name),
 		IsBot:        ptr.Ptr(jid.IsBot()),
 		ExtraUpdates: updateGhostLastSyncAt,
+	}
+	// CIRQLE: our numbers share one ghost per contact. A login that knows no name
+	// for the contact (its own number, for one) would rename the ghost to the bare
+	// number, and the next login that knows the name would rename it back: every
+	// contact search flipped the chat's name. Such a login only names a ghost that
+	// has no name yet or is still named after the number.
+	if name == wa.Main.Config.FormatDisplayname(jid, phone, types.ContactInfo{}) {
+		ui.Name = nil
+		ui.ExtraUpdates = bridgev2.MergeExtraUpdaters(ui.ExtraUpdates, func(ctx context.Context, ghost *bridgev2.Ghost) bool {
+			return numberMayRename(ghost.Name, phone) && ghost.UpdateName(ctx, name)
+		})
 	}
 	if jid.Server == types.BotServer {
 		ui.Identifiers = []string{}
@@ -276,6 +289,13 @@ func (wa *WhatsAppClient) contactToUserInfo(ctx context.Context, jid types.JID, 
 		ui.ExtraUpdates = bridgev2.MergeExtraUpdaters(ui.ExtraUpdates, wa.fetchGhostAvatar)
 	}
 	return ui
+}
+
+// numberMayRename says whether a name made from the number alone may replace the
+// ghost's current name: when it has none, or is itself made from the number
+// (such as "+14695551234 (WA)" from an older displayname template).
+func numberMayRename(current, phone string) bool {
+	return current == "" || (phone != "" && strings.Contains(current, phone))
 }
 
 func updateGhostLastSyncAt(_ context.Context, ghost *bridgev2.Ghost) bool {

@@ -22,6 +22,17 @@ and deployed from `cirqle-agents/deploy/team-messenger/prod/compose.yaml`.
   administers the group) may change Matrix power levels. The relay bot uses it to
   give staff the kick level, so Element's «Remove from room» works for relayed
   staff; the bridge carries a relayed kick out through the relay login.
+- Matrix power level changes for people who are not on WhatsApp (staff) are
+  accepted quietly instead of answered with "this bridge does not support
+  changing group power levels"; changes for WhatsApp members still are.
+- A login that knows no name for a contact (its own number, for one) no longer
+  renames the contact's ghost to the bare number. Several of our numbers share
+  each ghost, so every contact search used to flip a chat's name between the
+  name and the number.
+- `com.beeper.delete_chat` with `"com.cirqle.keep_on_phone": true` (CIRQLE
+  Messenger's «Leave group», sent by the relay bot as the account) leaves the
+  group like WhatsApp's «Exit group» and keeps the chat on the phone; the bridge
+  still deletes the portal, so the room closes for everyone in Matrix.
 
 ## Updating to a new upstream release
 
