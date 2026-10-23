@@ -39,6 +39,7 @@ var (
 	_ bridgev2.PollHandlingNetworkAPI           = (*WhatsAppClient)(nil)
 	_ bridgev2.DisappearTimerChangingNetworkAPI = (*WhatsAppClient)(nil)
 	_ bridgev2.MembershipHandlingNetworkAPI     = (*WhatsAppClient)(nil)
+	_ bridgev2.PowerLevelHandlingNetworkAPI     = (*WhatsAppClient)(nil)
 	_ bridgev2.RoomNameHandlingNetworkAPI       = (*WhatsAppClient)(nil)
 	_ bridgev2.RoomTopicHandlingNetworkAPI      = (*WhatsAppClient)(nil)
 	_ bridgev2.RoomAvatarHandlingNetworkAPI     = (*WhatsAppClient)(nil)
@@ -475,6 +476,18 @@ func (wa *WhatsAppClient) HandleMatrixMembership(ctx context.Context, msg *bridg
 	return &bridgev2.MatrixMembershipResult{RedirectTo: waid.MakeUserID(resp[0].JID)}, nil
 }
 
+// HandleMatrixPowerLevels keeps Matrix power levels a Matrix matter (CIRQLE): the
+// relay bot gives relayed staff the kick level in groups the account administers,
+// which used to answer every such change with "this bridge does not support
+// changing group power levels". Changes for WhatsApp members (ghosts or our own
+// logins) would mean WhatsApp admin roles, which stay unsupported.
+func (wa *WhatsAppClient) HandleMatrixPowerLevels(ctx context.Context, msg *bridgev2.MatrixPowerLevelChange) (bool, error) {
+	if len(msg.Users) > 0 {
+		return false, bridgev2.ErrPowerLevelsNotSupported
+	}
+	return false, nil
+}
+
 func (wa *WhatsAppClient) HandleMatrixRoomName(ctx context.Context, msg *bridgev2.MatrixRoomName) (ok bool, retErr error) {
 	portalJID, err := waid.ParsePortalID(msg.Portal.ID)
 	if err != nil {
@@ -678,10 +691,19 @@ func (wa *WhatsAppClient) HandleMarkedUnread(ctx context.Context, msg *bridgev2.
 	return wa.Client.SendAppState(ctx, appstate.BuildMarkChatAsRead(chatJID, msg.Content.Unread, lastTS, lastKey))
 }
 
+// keepOnPhoneKey marks a chat delete from CIRQLE Messenger's «Leave group»: the
+// number leaves the group, like WhatsApp's «Exit group», and the chat stays on the
+// phone. The bridge still deletes the portal, which closes it for everyone in Matrix.
+const keepOnPhoneKey = "com.cirqle.keep_on_phone"
+
 func (wa *WhatsAppClient) HandleMatrixDeleteChat(ctx context.Context, msg *bridgev2.MatrixDeleteChat) (retErr error) {
 	chatJID, err := waid.ParsePortalID(msg.Portal.ID)
 	if err != nil {
 		return err
+	}
+	keepOnPhone, _ := msg.Event.Content.Raw[keepOnPhoneKey].(bool)
+	if keepOnPhone && chatJID.Server != types.GroupServer {
+		return errors.New("only groups can be left")
 	}
 	if chatJID.Server == types.GroupServer {
 		memberInfo, err := wa.Main.Bridge.Matrix.GetMemberInfo(ctx, msg.Portal.MXID, wa.UserLogin.UserMXID)
@@ -694,6 +716,9 @@ func (wa *WhatsAppClient) HandleMatrixDeleteChat(ctx context.Context, msg *bridg
 				return fmt.Errorf("failed to leave group before deleting chat: %w", err)
 			}
 		}
+	}
+	if keepOnPhone {
+		return nil
 	}
 	lastTS, lastKey, err := wa.getLastMessageInfo(ctx, chatJID, msg.Portal.PortalKey)
 	if err != nil {
