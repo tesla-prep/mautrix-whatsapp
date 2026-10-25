@@ -164,6 +164,7 @@ func (wa *WhatsAppConnector) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to migrate to LID DMs: %w", err)
 	}
+	wa.addProvisioningRoutes()
 	go func() {
 		err = wa.syncMismatchingGhosts(wa.Bridge.BackgroundCtx)
 		if err != nil {

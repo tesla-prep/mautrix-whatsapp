@@ -575,5 +575,7 @@ func (wa *WhatsAppClient) wrapNewsletterInfo(ctx context.Context, info *types.Ne
 			},
 		},
 		Type: ptr.Ptr(database.RoomTypeDefault),
+		// CIRQLE: a channel room starts with the channel's latest posts (fetchNewsletterMessages).
+		CanBackfill: true,
 	}
 }
