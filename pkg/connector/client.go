@@ -357,6 +357,7 @@ func (wa *WhatsAppClient) startLoops() {
 	ctx = wa.UserLogin.Log.WithContext(ctx)
 	go wa.historySyncLoop(ctx)
 	go wa.ghostResyncLoop(ctx)
+	go wa.newsletterSyncLoop(ctx)
 	if mrc := wa.Main.Config.HistorySync.MediaRequests; mrc.AutoRequestMedia && mrc.RequestMethod == MediaRequestMethodLocalTime {
 		go wa.mediaRequestLoop(ctx)
 	}

@@ -484,6 +484,8 @@ func (wa *WhatsAppClient) FetchMessages(ctx context.Context, params bridgev2.Fet
 	}
 	if portalJID.Server == types.DefaultUserServer {
 		zerolog.Ctx(ctx).Warn().Stringer("portal_jid", portalJID).Msg("FetchMessages called for phone number portal")
+	} else if portalJID.Server == types.NewsletterServer {
+		return wa.fetchNewsletterMessages(ctx, portalJID, params)
 	}
 	var markRead bool
 	var startTime, endTime *time.Time

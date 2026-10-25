@@ -29,6 +29,21 @@ and deployed from `cirqle-agents/deploy/team-messenger/prod/compose.yaml`.
   renames the contact's ghost to the bare number. Several of our numbers share
   each ghost, so every contact search used to flip a chat's name between the
   name and the number.
+- Group admins are made and dismissed through the provisioning API (CIRQLE
+  Messenger's «Make group admin» / «Dismiss as admin», sent by the relay bot):
+  `POST /_matrix/provision/v3/cirqle/group_admin?user_id=<owner>&login_id=<login>`
+  with `{"room_id": "!…", "participant": "@whatsapp_…", "admin": true}`. The
+  bridge asks WhatsApp who is in the group, refuses what WhatsApp would (400: not
+  a group, not a member, the number itself, dismissing the creator; 403: the
+  number is not in the group or not an admin), promotes or demotes, and updates
+  the room's power levels at once; 502 is WhatsApp's refusal, 504 no answer.
+  Matrix power levels can't do it: an admin (50) can't lower another admin.
+- Channels the login owns, administers or follows get rooms: two minutes after
+  connecting and then hourly, the bridge lists the subscribed channels
+  (`GetSubscribedNewsletters`, at most 100), resyncs each one (name, avatar, the
+  login's role) and fetches the posts newer than the room's last one (at most 50,
+  so a new room starts with the latest 50). Posts that arrive as messages are
+  bridged as before; older posts are not backfilled.
 - `com.beeper.delete_chat` with `"com.cirqle.keep_on_phone": true` (CIRQLE
   Messenger's «Leave group», sent by the relay bot as the account) leaves the
   group like WhatsApp's «Exit group» and keeps the chat on the phone; the bridge
