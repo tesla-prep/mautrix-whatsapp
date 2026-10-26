@@ -78,6 +78,15 @@ func (wa *WhatsAppClient) syncNewsletters(ctx context.Context) {
 		log.Err(err).Msg("Failed to get subscribed channels")
 		return
 	}
+	known, err := wa.knownNewsletters(ctx)
+	if err != nil {
+		log.Err(err).Msg("Failed to get the channels the login knows")
+	}
+	for _, jid := range known {
+		if !slices.ContainsFunc(newsletters, func(info *types.NewsletterMetadata) bool { return info != nil && info.ID == jid }) {
+			newsletters = append(newsletters, &types.NewsletterMetadata{ID: jid})
+		}
+	}
 	if len(newsletters) > maxSyncedNewsletters {
 		log.Warn().Int("channel_count", len(newsletters)).Msg("Too many channels, syncing only the first ones")
 		newsletters = newsletters[:maxSyncedNewsletters]
@@ -95,6 +104,10 @@ func (wa *WhatsAppClient) syncNewsletters(ctx context.Context) {
 				continue
 			}
 			info = full
+		}
+		if info.ViewerMeta.Role == types.NewsletterRoleGuest {
+			log.Debug().Stringer("channel_jid", info.ID).Msg("Skipping channel the login no longer follows")
+			continue
 		}
 		res := wa.UserLogin.QueueRemoteEvent(&simplevent.ChatResync{
 			EventMeta: simplevent.EventMeta{
@@ -117,6 +130,37 @@ func (wa *WhatsAppClient) syncNewsletters(ctx context.Context) {
 		synced++
 	}
 	log.Info().Int("channel_count", synced).Msg("Synced WhatsApp channels")
+}
+
+const getKnownNewslettersQuery = `
+	SELECT chat_jid FROM whatsmeow_chat_settings WHERE our_jid=$1 AND chat_jid LIKE '%@newsletter'
+	UNION
+	SELECT portal_id FROM user_portal WHERE bridge_id=$2 AND login_id=$3 AND portal_id LIKE '%@newsletter'
+`
+
+// knownNewsletters lists the channels the login has seen: those in its chat
+// settings (app state, which has every channel on the phone, owned ones
+// included) and those it already has portals for. WhatsApp's subscribed list
+// can come back empty for a login that owns and follows channels (2026-10-26:
+// «Andrey - Personal», 4 channels in its app state, `xwa2_newsletter_subscribed: []`
+// every hour), so the list alone gave none of them a room.
+func (wa *WhatsAppClient) knownNewsletters(ctx context.Context) ([]types.JID, error) {
+	rows, err := wa.Main.DB.Query(ctx, getKnownNewslettersQuery, wa.JID, wa.Main.Bridge.ID, wa.UserLogin.ID)
+	if err != nil {
+		return nil, err
+	}
+	var jids []types.JID
+	for rows.Next() {
+		var raw string
+		if err = rows.Scan(&raw); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		if jid, err := types.ParseJID(raw); err == nil && jid.Server == types.NewsletterServer {
+			jids = append(jids, jid)
+		}
+	}
+	return jids, rows.Err()
 }
 
 // fetchNewsletterMessages backfills a channel room with its latest posts.
