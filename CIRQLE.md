@@ -48,6 +48,11 @@ and deployed from `cirqle-agents/deploy/team-messenger/prod/compose.yaml`.
   Messenger's «Leave group», sent by the relay bot as the account) leaves the
   group like WhatsApp's «Exit group» and keeps the chat on the phone; the bridge
   still deletes the portal, so the room closes for everyone in Matrix.
+- Every login gets its personal filtering space as soon as it connects, not
+  when its first chat gets a room. CIRQLE Messenger lists numbers by their
+  spaces, so a number connected in Directory with no chats bridged yet was
+  missing from the number picker, and the relay bot had nowhere to add its
+  readers or the number's state.
 
 ## Updating to a new upstream release
 
