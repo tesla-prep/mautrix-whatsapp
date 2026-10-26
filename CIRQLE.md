@@ -43,11 +43,20 @@ and deployed from `cirqle-agents/deploy/team-messenger/prod/compose.yaml`.
   (`GetSubscribedNewsletters`, at most 100), resyncs each one (name, avatar, the
   login's role) and fetches the posts newer than the room's last one (at most 50,
   so a new room starts with the latest 50). Posts that arrive as messages are
-  bridged as before; older posts are not backfilled.
+  bridged as before; older posts are not backfilled. WhatsApp's subscribed list
+  can come back empty, so the sync also takes every channel in the login's
+  chat settings (app state, owned channels included) and every channel it
+  already has a portal for, asks WhatsApp for each one's role, and skips the
+  ones the login no longer follows.
 - `com.beeper.delete_chat` with `"com.cirqle.keep_on_phone": true` (CIRQLE
   Messenger's «Leave group», sent by the relay bot as the account) leaves the
   group like WhatsApp's «Exit group» and keeps the chat on the phone; the bridge
   still deletes the portal, so the room closes for everyone in Matrix.
+- Every login gets its personal filtering space as soon as it connects, not
+  when its first chat gets a room. CIRQLE Messenger lists numbers by their
+  spaces, so a number connected in Directory with no chats bridged yet was
+  missing from the number picker, and the relay bot had nowhere to add its
+  readers or the number's state.
 
 ## Updating to a new upstream release
 
