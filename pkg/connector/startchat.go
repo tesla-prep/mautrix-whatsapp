@@ -17,6 +17,7 @@
 package connector
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -193,8 +194,39 @@ func (wa *WhatsAppClient) GetContactList(ctx context.Context) ([]*bridgev2.Resol
 	return wa.getContactList(ctx, "", true)
 }
 
+// CIRQLE: the bridge names its ghosts without the phone book (displayname_template),
+// and our numbers share one ghost per contact, so a search answered with the ghost's
+// name: the bare number for every contact without a push name (2026-11-03: 694 of the
+// 696 contacts of «SMS USA (NY)»). A search answers with the name this login's phone
+// book gives the contact instead, and leaves the shared ghost as it is.
 func (wa *WhatsAppClient) SearchUsers(ctx context.Context, query string) ([]*bridgev2.ResolveIdentifierResponse, error) {
-	return wa.getContactList(ctx, strings.ToLower(query), false)
+	results, err := wa.getContactList(ctx, strings.ToLower(query), false)
+	if err != nil {
+		return nil, err
+	}
+	for _, result := range results {
+		if name := wa.addressBookName(ctx, waid.ParseUserID(result.UserID)); name != "" {
+			result.UserInfo.Name = &name
+			result.Ghost = nil
+		}
+	}
+	return results, nil
+}
+
+// addressBookName is the name the login's phone book gives the contact, kept under
+// its phone number when WhatsApp knows the contact by LID.
+func (wa *WhatsAppClient) addressBookName(ctx context.Context, jid types.JID) string {
+	jids := []types.JID{jid}
+	if alt, err := wa.GetStore().GetAltJID(ctx, jid); err == nil && !alt.IsEmpty() {
+		jids = append(jids, alt)
+	}
+	for _, id := range jids {
+		contact, err := wa.GetStore().Contacts.GetContact(ctx, id)
+		if name := cmp.Or(contact.FullName, contact.FirstName); err == nil && name != "" {
+			return name
+		}
+	}
+	return ""
 }
 
 func matchesQuery(str string, query string) bool {
