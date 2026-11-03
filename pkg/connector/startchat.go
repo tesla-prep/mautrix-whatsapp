@@ -191,26 +191,28 @@ func (wa *WhatsAppClient) ResolveIdentifier(ctx context.Context, identifier stri
 }
 
 func (wa *WhatsAppClient) GetContactList(ctx context.Context) ([]*bridgev2.ResolveIdentifierResponse, error) {
-	return wa.getContactList(ctx, "", true)
+	results, err := wa.getContactList(ctx, "", true)
+	return wa.withAddressBookNames(ctx, results), err
+}
+
+func (wa *WhatsAppClient) SearchUsers(ctx context.Context, query string) ([]*bridgev2.ResolveIdentifierResponse, error) {
+	results, err := wa.getContactList(ctx, strings.ToLower(query), false)
+	return wa.withAddressBookNames(ctx, results), err
 }
 
 // CIRQLE: the bridge names its ghosts without the phone book (displayname_template),
-// and our numbers share one ghost per contact, so a search answered with the ghost's
-// name: the bare number for every contact without a push name (2026-11-03: 694 of the
-// 696 contacts of «SMS USA (NY)»). A search answers with the name this login's phone
-// book gives the contact instead, and leaves the shared ghost as it is.
-func (wa *WhatsAppClient) SearchUsers(ctx context.Context, query string) ([]*bridgev2.ResolveIdentifierResponse, error) {
-	results, err := wa.getContactList(ctx, strings.ToLower(query), false)
-	if err != nil {
-		return nil, err
-	}
+// and our numbers share one ghost per contact, so a search or the contact list answered
+// with the ghost's name: the bare number for every contact without a push name
+// (2026-11-03: 670 of the 694 contacts of «SMS USA (NY)»). Both answer with the name
+// this login's phone book gives the contact instead, and leave the shared ghost as it is.
+func (wa *WhatsAppClient) withAddressBookNames(ctx context.Context, results []*bridgev2.ResolveIdentifierResponse) []*bridgev2.ResolveIdentifierResponse {
 	for _, result := range results {
 		if name := wa.addressBookName(ctx, waid.ParseUserID(result.UserID)); name != "" {
 			result.UserInfo.Name = &name
 			result.Ghost = nil
 		}
 	}
-	return results, nil
+	return results
 }
 
 // addressBookName is the name the login's phone book gives the contact, kept under
